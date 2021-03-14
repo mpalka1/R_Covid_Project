@@ -1,0 +1,192 @@
+---
+title: 'COVID-19 ANALYSIS'
+author: "Palka, Matthew"
+output:
+html_document: default
+pdf_document: default
+---
+```{r setup, include = FALSE}
+# DO NOT ADD OR REVISE CODE HERE
+knitr::opts_chunk$set(echo = FALSE, eval = TRUE)
+
+```
+Project Goals:
+  
+  1)Descriptive Statistics: Do an Exploratory Data Analysis (EDA) and provide 
+appropriate summary statistics / visualizations to help understand the spread
+of the disease (incidence) as well as its fatality rate. 
+
+2)Inferential Statistics: Pick 2 countries and compare their incidence and
+fatality rates using hypothesis testing and confidence interval methods
+
+3)Correlation: Pick all the countries and evaluate the relationship between 
+incidence rates and fatality rates. Compute the correlation coefficient, if relevant.
+
+4)Regression: Pick United States. Look at the time series of cases and 
+time series of deaths. Use a regression model to predict the number of cases 
+and the number of deaths for the next 5 days in the future.
+
+Final report: Submit a pdf file with your analysis results and conclusions.
+
+```{r}
+install.packages("ggplot2", repos = "http://cran.us.r-project.org")
+install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+install.packages("funModeling", repos = "http://cran.us.r-project.org")
+install.packages("Hmisc", repos = "http://cran.us.r-project.org")
+install.packages("ggpubr", repos = "http://cran.us.r-project.org")
+install.packages("dplyr", repos = "http://cran.us.r-project.org")
+install.packages("maps", repos = "http://cran.us.r-project.org")
+install.packages("GGally", repos = "http://cran.us.r-project.org")
+library(GGally)
+library(readxl)
+library(funModeling) 
+library(tidyverse) 
+library(Hmisc)
+library(ggplot2)
+library(gridExtra)
+
+```
+
+```{r}
+mydata <- read_excel("COVID-19-geographic-disbtribution-worldwide-2020-12-14.xlsx", 
+     col_types = c("date", "skip", "numeric", 
+         "skip", "numeric", "numeric", "text", 
+         "text", "skip", "numeric", "text", 
+         "numeric"))
+print(mydata)
+```
+
+```{r}
+describe(mydata)
+ttlsbyCountry <- mydata %>%
+group_by(countriesAndTerritories, continentExp, month) %>%
+summarise(deaths = sum(deaths),cases = sum(cases), mortality = (deaths/cases))
+
+ttlsbyContin <- mydata %>%
+group_by(continentExp, month) %>%
+summarise(deaths = sum(deaths), cases = sum(cases), mortality = (deaths/cases))
+
+newcolordeaths <- qplot(dateRep, deaths, colour = continentExp, 
+   data = mydata)
+newcolorcases <- qplot(dateRep, cases, colour = continentExp, 
+   data = mydata)
+newcolordeaths
+newcolorcases
+
+test1 <- qplot(cases, deaths, colour = continentExp, 
+   data = ttlsbyCountry)+
+   facet_wrap( ~ month )
+test2 <- qplot(month, cases, colour = continentExp, 
+   data = ttlsbyContin)+
+   geom_line()
+test1
+test2
+
+gDeath <- ggplot(mydata, aes(x=dateRep, y=deaths)) +
+  geom_line() +
+  xlab("month") + 
+  facet_grid(cols = vars(continentExp))
+gDeath
+gptDeath <- ggplot(mydata, aes(dateRep,deaths,color = continentExp)) +
+      geom_smooth(method=lm)
+gptDeath
+
+gCases <- ggplot(mydata, aes(x=dateRep, y=cases)) +
+  geom_line() +
+  xlab("date")
+
+gBox <-  ggplot(mydata, aes(x=continentExp, y=deaths)) +
+          geom_boxplot(outlier.colour="red", outlier.shape=16,
+             outlier.size=2, notch=FALSE)
+
+
+#grid.arrange(newcolordeaths,newcolorcases, ncol = 2, nrow = 1)
+
+
+
+
+```
+```{r}
+#Part 2
+#2)Inferential Statistics: Pick 2 countries and compare their incidence and
+#fatality rates using hypothesis testing and confidence interval methods
+#Compare Poland and Russia, Null Hypothesis that both countries were seeing a equal spike in cases as well as Deaths
+
+polData <- mydata %>%
+  filter(countriesAndTerritories=="Poland")%>%
+  group_by(month,countriesAndTerritories)%>%
+  summarise(deaths = sum(deaths),cases = sum(cases), mortality = (deaths/cases))
+rusData <- mydata %>%
+  filter(countriesAndTerritories=="Russia")%>%
+  group_by(month,countriesAndTerritories)%>%
+  summarise(deaths = sum(deaths),cases = sum(cases), mortality = (deaths/cases))
+t.test(polData$mortality,rusData$mortality)
+
+#Based off the results of the T-test wee will most likely reject the null hypothesis that both Poland and Russians mortality rates are the same since the P-value of .029 falls below the .05 threshold so we are able to reject the null hypothesis.
+
+```
+```{r}
+#3)Correlation: Pick all the countries and evaluate the relationship between 
+#incidence rates and fatality rates. Compute the correlation coefficient, if relevant.
+ttlCases = mydata$cases
+ttlDeaths = mydata$deaths
+cor(ttlCases,ttlDeaths)
+
+#Overall there is a strong correlation between having more cases and having more deaths.
+```
+```{r}
+#4)Regression: Pick United States. Look at the time series of cases and 
+#time series of deaths. Use a regression model to predict the number of cases 
+#and the number of deaths for the next 5 days in the future.
+
+usData <- mydata %>%
+  filter(countriesAndTerritories=="United_States_of_America")%>%
+  group_by(dateRep,countriesAndTerritories)%>%
+  summarise(deaths = sum(deaths),cases = sum(cases), mortality = (deaths/cases))
+usData$index <- 1:nrow(usData)
+usData
+
+fit_1 <- lm(deaths ~ index, data = usData)
+summary(fit_1)
+fit_2 <- lm(cases ~ index, data = usData)
+summary(fit_2)
+
+ggplot(data=usData, aes(fit_1$residuals)) +
+geom_histogram(binwidth = 1, color = "black", fill = "purple4") +
+theme(panel.background = element_rect(fill = "white"),
+axis.line.x=element_line(),
+axis.line.y=element_line()) +
+ggtitle("Histogram for Model Residuals")
+
+
+
+ggplot(data = usData, aes(x = dateRep, y = deaths)) +
+geom_point() +
+stat_smooth(method = "lm", col = "dodgerblue3") +
+theme(panel.background = element_rect(fill = "white"),
+axis.line.x=element_line(),
+axis.line.y=element_line()) +
+ggtitle("Linear Model Fitted to Death Data")
+
+ggplot(data = usData, aes(x = dateRep, y = cases)) +
+geom_point() +
+stat_smooth(method = "lm", col = "dodgerblue3") +
+theme(panel.background = element_rect(fill = "white"),
+axis.line.x=element_line(),
+axis.line.y=element_line()) +
+ggtitle("Linear Model Fitted to Case Data")
+
+deathPred <- round(predict(fit_1, data.frame(index = 355)),0)
+casePred <- round(predict(fit_2, data.frame(index = 355)),0)
+
+sprintf("Based on my model, 5 days after the lasts datapoint, the number of deaths will be %f and the number of cases will be %f",deathPred,casePred)
+
+```
+```{r}
+#Final report: Submit a pdf file with your analysis results and conclusions.
+
+print("Overall I was able to build a model that was relatively well fit. The R-Squared, F-Statistic, and p-value for the cases prediction seemed to support a relatively well fit linear #regression. On the Deaths, the previosly mentioned measurements were a little less convincing, but overall the line of best fit seemed to provide valuable insight to a positively #sloped regression.")
+
+```
+
+
